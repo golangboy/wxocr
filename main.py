@@ -3,8 +3,10 @@ import os
 import uuid
 import base64
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 wcocr.init("/app/wx/opt/wechat/wxocr", "/app/wx/opt/wechat")
 
 @app.route('/ocr', methods=['POST'])
