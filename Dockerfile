@@ -11,6 +11,7 @@ COPY wcocr.cpython-312-x86_64-linux-gnu.so /app/wcocr.cpython-312-x86_64-linux-g
 COPY wx /app/wx
 
 COPY main.py /app/main.py
+COPY templates /app/templates
 
 WORKDIR /app
 

@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微信OCR文字识别工具</title>
+    <style>
+        :root {
+            --primary-color: #07c160;
+            --secondary-color: #576b95;
+        }
+
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .upload-section {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            margin: 20px 0;
+            transition: all 0.3s;
+        }
+
+        .upload-section:hover {
+            border-color: var(--primary-color);
+            background: #f8fff9;
+        }
+
+        .preview-image {
+            max-width: 100%;
+            max-height: 400px;
+            margin: 20px 0;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .input-group {
+            margin: 20px 0;
+        }
+
+        input[type="file"],
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+
+        button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .result-table th,
+        .result-table td {
+            padding: 12px;
+            border: 1px solid #eee;
+            text-align: left;
+        }
+
+        .result-table th {
+            background: var(--secondary-color);
+            color: white;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: var(--primary-color);
+            margin: 20px 0;
+        }
+
+        .error {
+            color: #ff4d4f;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .image-container {
+            position: relative;
+            margin: 20px 0;
+            display: inline-block;
+        }
+
+        .text-box {
+            position: absolute;
+            border: 2px solid var(--primary-color);
+            background-color: rgba(7, 193, 96, 0.1);
+            cursor: pointer;
+        }
+
+        .text-tooltip {
+            position: absolute;
+            background: white;
+            border: 1px solid #ddd;
+            padding: 8px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            display: none;
+            max-width: 300px;
+            word-break: break-word;
+        }
+
+        .confidence {
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>微信OCR文字识别工具</h1>
+
+        <!-- 上传区域 -->
+        <div class="upload-section">
+            <div class="input-group">
+                <input type="file" id="fileInput" accept="image/*">
+                <p>或拖拽图片到此区域</p>
+                <input type="text" id="urlInput" placeholder="输入图片URL地址">
+            </div>
+            <button onclick="processImage()">开始识别</button>
+        </div>
+
+        <!-- 图片预览 -->
+        <div class="image-container" id="imageContainer">
+            <img id="preview" class="preview-image">
+            <!-- 文本框将在这里动态添加 -->
+        </div>
+
+        <!-- 加载状态 -->
+        <div class="loading" id="loading">识别中，请稍候...</div>
+
+        <!-- 错误提示 -->
+        <div class="error" id="error"></div>
+
+        <!-- 结果显示 -->
+        <table class="result-table" id="resultTable">
+            <thead>
+                <tr>
+                    <th>文本内容</th>
+                    <th>置信度</th>
+                    <th>位置信息 (左, 上, 右, 下)</th>
+                </tr>
+            </thead>
+            <tbody id="resultBody"></tbody>
+        </table>
+
+        <!-- 使用说明 -->
+        <h2>API接口说明</h2>
+        <h3>请求方式</h3>
+        <pre>POST /ocr</pre>
+
+        <h3>请求示例</h3>
+        <pre>
+{
+  "image": "BASE64_ENCODED_IMAGE_DATA"
+}</pre>
+
+        <h3>返回示例</h3>
+        <pre id="responseSample"></pre>
+    </div>
+
+    <script>
+        // 默认的API地址
+        const API_ENDPOINT = window.location.origin + '/ocr';
+
+        // 初始化拖放功能
+        const uploadSection = document.querySelector('.upload-section');
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.style.backgroundColor = '#f0fff0';
+        });
+
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.style.backgroundColor = '';
+            const file = e.dataTransfer.files[0];
+            handleFile(file);
+        });
+
+        // 处理文件选择
+        document.getElementById('fileInput').addEventListener('change', function (e) {
+            handleFile(e.target.files[0]);
+        });
+
+        // 处理文件上传
+        async function handleFile(file) {
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                showError('请上传图片文件');
+                return;
+            }
+
+            // 显示预览图片
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('preview').src = e.target.result;
+                document.getElementById('preview').style.display = 'block';
+
+                // 清除之前的文本框
+                const imageContainer = document.getElementById('imageContainer');
+                const existingBoxes = imageContainer.querySelectorAll('.text-box, .text-tooltip');
+                existingBoxes.forEach(box => box.remove());
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 开始处理图像
+        async function processImage() {
+            const file = document.getElementById('fileInput').files[0];
+            const url = document.getElementById('urlInput').value;
+            let base64Data = '';
+
+            try {
+                showLoading();
+                clearError();
+
+                if (file) {
+                    base64Data = await fileToBase64(file);
+                } else if (url) {
+                    base64Data = await urlToBase64(url);
+                } else {
+                    showError('请选择图片或输入图片URL');
+                    return;
+                }
+
+                // 发送请求
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ image: base64Data })
+                });
+
+                const data = await response.json();
+                handleResponse(data);
+            } catch (error) {
+                showError(`请求失败：${error.message}`);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 处理响应数据
+        function handleResponse(data) {
+            // 处理新的响应结构
+            const resultData = data.result || data;
+
+            if (resultData.errcode !== 0) {
+                showError(`识别失败，错误码：${resultData.errcode}`);
+                return;
+            }
+
+            // 显示结果表格
+            const tbody = document.getElementById('resultBody');
+            tbody.innerHTML = '';
+            resultData.ocr_response.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.text}</td>
+                    <td>${(item.rate * 100).toFixed(2)}%</td>
+                    <td>(${item.left.toFixed(1)}, ${item.top.toFixed(1)}, 
+                        ${item.right.toFixed(1)}, ${item.bottom.toFixed(1)})</td>
+                `;
+                tbody.appendChild(row);
+            });
+            document.getElementById('resultTable').style.display = 'table';
+
+            // 在图片上绘制识别区域
+            drawTextBoxes(resultData.ocr_response, resultData.width, resultData.height);
+        }
+
+        // 在图片上绘制文本框
+        function drawTextBoxes(ocrResults, originalWidth, originalHeight) {
+            const imageContainer = document.getElementById('imageContainer');
+            const preview = document.getElementById('preview');
+
+            // 清除之前的文本框
+            const existingBoxes = imageContainer.querySelectorAll('.text-box, .text-tooltip');
+            existingBoxes.forEach(box => box.remove());
+
+            // 获取图片的实际显示尺寸和位置
+            const imgRect = preview.getBoundingClientRect();
+            const containerRect = imageContainer.getBoundingClientRect();
+
+            // 计算图片相对于容器的偏移
+            const offsetX = imgRect.left - containerRect.left;
+            const offsetY = imgRect.top - containerRect.top;
+
+            // 计算缩放比例
+            const scaleX = imgRect.width / originalWidth;
+            const scaleY = imgRect.height / originalHeight;
+
+            // 为每个识别结果创建文本框
+            ocrResults.forEach((item, index) => {
+                // 创建文本框
+                const textBox = document.createElement('div');
+                textBox.className = 'text-box';
+
+                // 精确定位文本框，考虑图片在容器中的偏移
+                const left = item.left * scaleX + offsetX;
+                const top = item.top * scaleY + offsetY;
+                const width = (item.right - item.left) * scaleX;
+                const height = (item.bottom - item.top) * scaleY;
+
+                // 设置文本框位置和大小
+                textBox.style.left = `${left}px`;
+                textBox.style.top = `${top}px`;
+                textBox.style.width = `${width}px`;
+                textBox.style.height = `${height}px`;
+                textBox.dataset.index = index;
+
+                // 创建提示框
+                const tooltip = document.createElement('div');
+                tooltip.className = 'text-tooltip';
+                tooltip.innerHTML = `
+                    <div>${item.text}</div>
+                    <div class="confidence">置信度: ${(item.rate * 100).toFixed(2)}%</div>
+                `;
+
+                // 添加鼠标事件
+                textBox.addEventListener('mouseenter', function (e) {
+                    tooltip.style.left = `${e.pageX - imageContainer.offsetLeft + 10}px`;
+                    tooltip.style.top = `${e.pageY - imageContainer.offsetTop + 10}px`;
+                    tooltip.style.display = 'block';
+                });
+
+                textBox.addEventListener('mousemove', function (e) {
+                    tooltip.style.left = `${e.pageX - imageContainer.offsetLeft + 10}px`;
+                    tooltip.style.top = `${e.pageY - imageContainer.offsetTop + 10}px`;
+                });
+
+                textBox.addEventListener('mouseleave', function () {
+                    tooltip.style.display = 'none';
+                });
+
+                imageContainer.appendChild(textBox);
+                imageContainer.appendChild(tooltip);
+            });
+        }
+
+        // 工具函数
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function urlToBase64(url) {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            return fileToBase64(blob);
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function clearError() {
+            document.getElementById('error').style.display = 'none';
+        }
+
+        // 初始化示例响应显示
+        document.getElementById('responseSample').textContent = JSON.stringify({
+            "result": {
+                "errcode": 0,
+                "height": 258,
+                "imgpath": "temp/0cfbda36-a05d-4cba-9a72-cec6833d305d.png",
+                "ocr_response": [
+                    {
+                        "bottom": 41.64999771118164,
+                        "left": 33.6875,
+                        "rate": 0.9951504468917847,
+                        "right": 164.76248168945312,
+                        "text": "API接口说明",
+                        "top": 18.98750114440918
+                    }
+                ],
+                "width": 392
+            }
+        }, null, 2);
+    </script>
+</body>
+
+</html>

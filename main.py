@@ -2,10 +2,15 @@ import wcocr
 import os
 import uuid
 import base64
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, send_from_directory
 
 app = Flask(__name__)
 wcocr.init("/app/wx/opt/wechat/wxocr", "/app/wx/opt/wechat")
+
+# 创建静态文件夹
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir)
 
 def extract_image_type(base64_data):
     # Check if the base64 data has the expected prefix
@@ -15,6 +20,10 @@ def extract_image_type(base64_data):
         if prefix_end != -1:
             return base64_data[len('data:image/'):prefix_end], base64_data.split(';base64,')[-1]
     return 'png', base64_data
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/ocr', methods=['POST'])
 def ocr():
@@ -53,4 +62,14 @@ def ocr():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    # 确保templates目录存在
+    templates_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+    if not os.path.exists(templates_dir):
+        os.makedirs(templates_dir)
+    
+    # 确保temp目录存在
+    temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp')
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+        
     app.run(host='0.0.0.0', port=5000, threaded=True)
